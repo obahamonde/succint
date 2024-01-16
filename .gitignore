@@ -1,0 +1,6 @@
+.env
+config.json
+lol.py
+data/*
+audio/*
+templates
