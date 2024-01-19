@@ -17,7 +17,7 @@ from ..utils.decorators import logger, robust
 
 async def get_db(namespace: str, key: str):
     url = os.getenv("DATABASE_URL") or os.getenv("SURREAL_DB_URL") or "ws://db:8000/rpc"
-    async with Surreal(url=url, max_size=2 ** 22) as db:
+    async with Surreal(url=url, max_size=2**22) as db:
         if db.client_state.value == 2:
             await db.connect()
         await db.use(namespace, key)
@@ -65,7 +65,7 @@ class ModelDecoder(json.JSONDecoder):
         return o
 
 
-class Model(BaseModel):
+class DatabaseModel(BaseModel):
     model_config = ConfigDict(
         arbitrary_types_allowed=True, extra="allow", loc_by_alias=True
     )
@@ -131,7 +131,7 @@ class Model(BaseModel):
 
 
 S = TypeVar("S", bound=BaseModel)
-M = TypeVar("M", bound=Model)
+M = TypeVar("M", bound=DatabaseModel)
 
 
 class Service(Generic[S, M], ABC):

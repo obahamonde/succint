@@ -1,3 +1,4 @@
+import os
 import re
 from functools import cached_property
 from io import BytesIO
@@ -26,7 +27,7 @@ class Transcript(BaseModel):
     language: str = Field(...)
 
 
-class Whisper:
+class AudioTranscription:
     @cached_property
     @torch.no_grad()  # type: ignore
     def audio(self):
@@ -39,29 +40,28 @@ class Whisper:
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
 
-    async def transcribe(
-        self, audio: AsyncGenerator[bytes, None]
-    ):
+    async def transcribe(self, audio: AsyncGenerator[bytes, None]):
         tensor = await self._load_audio(audio)
         response = self.audio.transcribe(tensor)  # type: ignore
-        if isinstance(response, dict): # type: ignore
+        if isinstance(response, dict):  # type: ignore
             segments = [
-            Segment(**r) for r in response.get("segments", []) if isinstance(r, dict) # type: ignore
-        ]
+                Segment(**r) for r in response.get("segments", []) if isinstance(r, dict)  # type: ignore
+            ]
             return Transcript(
-            text=response.get("text", ""), segments=segments, language=response.get("language", "") # type: ignore
-        ) # type: ignore
-        segments = [Segment(**r) for r in response if isinstance(r, dict)] # type: ignore
+                text=response.get("text", ""), segments=segments, language=response.get("language", "")  # type: ignore
+            )  # type: ignore
+        segments = [Segment(**r) for r in response if isinstance(r, dict)]  # type: ignore
         return Transcript(text="", segments=segments, language="")
-    
+
     async def _load_audio(self, audio: AsyncGenerator[bytes, None]):
         with TemporaryDirectory() as tmp:
             path = f"{tmp}/{str(uuid4())}.mp3"
             with open(path, "wb") as file:
                 async for chunk in audio:
                     file.write(chunk)
-            return whisper.load_audio(path)
-
+            response = whisper.load_audio(path)
+            os.remove(path)
+            return response
     async def run(self, *, audio: AsyncGenerator[bytes, None]):
         return await self.transcribe(audio)
 

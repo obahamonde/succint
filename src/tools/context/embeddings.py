@@ -1,29 +1,29 @@
 from functools import cached_property
-from typing import Any, Literal, Optional, TypeAlias, Union, cast
+from typing import Any, Literal, Optional, TypeAlias, Union, cast, List
 
 import torch
-from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from sentence_transformers import SentenceTransformer  # type: ignore
 
-from src.database.application import Model, Surreal, get_db
-from src.utils.decorators import async_io, robust
+from src.database.application import DatabaseModel, Surreal
 
 Value: TypeAlias = Union[str, int, float, bool, list[str]]
 EmbeddingsModel: TypeAlias = Literal["all-MiniLM-L6-v2"]
 
 
-@robust
-@async_io
 def tensor_dumps(obj: torch.Tensor | list[torch.Tensor]):
     return cast(list[float], obj.tolist())  # type: ignore
 
 
 def tensor_loads(obj: Any):
-    return torch.tensor(obj) if isinstance(obj, list) else obj
+    if isinstance(obj, list):
+        return torch.tensor(obj)
+    if isinstance(obj, torch.Tensor):
+        return obj
+    raise TypeError(f"Invalid type {type(obj)}")
 
 
-class Embeddings(Model):
+class Embeddings(DatabaseModel):
     model: EmbeddingsModel = Field(
         default="all-MiniLM-L6-v2", description="Model to use for embeddings"
     )
@@ -37,7 +37,7 @@ class Embeddings(Model):
         return len(self.vector)
 
     def __call__(self):
-        return (tensor_loads(self.vector)).to("cuda")
+        return tensor_loads(self.vector)
 
 
 class Sentence(BaseModel):
@@ -47,29 +47,29 @@ class Sentence(BaseModel):
     )
 
 
-class EmbeddingsController(APIRouter):
+class VectorStore:
     @cached_property
-    def ai(self):
+    def embeddings(self):
         return SentenceTransformer("all-MiniLM-L6-v2")  # type: ignore
 
     async def upsert(self, *, data: Sentence, db: Surreal):
-        encoded = torch.from_numpy(self.ai.encode(data.sentence))  # type: ignore
+        encoded = torch.from_numpy(self.embeddings.encode(data.sentence))  # type: ignore
         embedding = Embeddings(
             sentences=data.sentence,
             metadata=data.metadata,
-            vector=await tensor_dumps(encoded),  # type: ignore
+            vector=tensor_dumps(encoded),  # type: ignore
         )
-        response = await db.create(self.__class__.__name__, embedding.dict())
-        return len(Embeddings(**response[0]))
+        return await db.create(self.__class__.__name__, embedding.dict())
 
-    async def query(self, *, data: Sentence, db: Surreal):
-        encoded = self.ai.encode(data.sentence)  # type: ignore
-        assert isinstance(encoded, torch.Tensor)
+    async def query(self, *, data: Sentence, db: Surreal, top_k:int=10) -> list[tuple[str, float]]:
+        # Encode the input sentence
+        encoded_query = torch.from_numpy(self.embeddings.encode(data.sentence))
+
+        # Fetch the universe of embeddings from the database
         universe = [
             Embeddings(**item) for item in await db.select(self.__class__.__name__)
         ]
-        return sorted(
-            universe,
-            key=lambda x: torch.cosine_similarity(encoded, x(), dim=0).item(),
-            reverse=True,
+        scores = torch.nn.functional.cosine_similarity(
+            encoded_query, torch.tensor([item.vector for item in universe])
         )
+        return ({'sentence': universe[i].sentences, 'score': scores[i].item()} for i in scores.argsort(descending=True)[:top_k])

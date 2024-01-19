@@ -22,7 +22,7 @@ class APIClient(BaseModel, LazyProxy[AsyncClient]):
 
     def __load__(self, *args: Any, **kwargs: Any):
         return AsyncClient(
-            base_url=self.base_url, headers=self.headers, *args, **kwargs
+            base_url=self.base_url, headers=self.headers, timeout=30, *args, **kwargs
         )
 
     def dict(self, *args: Any, **kwargs: Any):

@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from typing import Generic, NamedTuple, TypeVar
+from typing import Generic, TypeVar, Callable
 
 import numpy as np
 import tiktoken
@@ -9,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sentence_transformers import SentenceTransformer  # type: ignore
 
 NN = TypeVar("NN", bound=torch.nn.Module)
+T = TypeVar("T")
 
 
 class Launch(Generic[NN], BaseModel):
@@ -25,8 +25,9 @@ def attention(
     v: torch.Tensor,
     mask: torch.Tensor,
     dropout: torch.nn.Dropout,
+    func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = torch.matmul,
 ) -> torch.Tensor:
-    scores = torch.matmul(q, k.transpose(-2, -1)) / np.sqrt(q.size(-1))
+    scores = func(q, k.transpose(-2, -1)) / np.sqrt(q.size(-1))
     scores = scores.masked_fill(mask == 0, -1e9)
     scores = dropout(torch.softmax(scores, dim=-1))
-    return torch.matmul(scores, v)
+    return func(scores, v)

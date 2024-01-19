@@ -25,6 +25,33 @@ services:
       - .env
     networks:
       - surrealdb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+  mistral:
+    container_name: mistral
+    image: ghcr.io/mistralai/mistral-src/vllm:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    command: --host 0.0.0.0 --model mistralai/Mistral-7B-Instruct-v0.2
+    env_file:
+      - .env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - surrealdb
+
 
   proxy:
     container_name: proxy

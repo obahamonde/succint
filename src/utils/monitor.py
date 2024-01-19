@@ -1,7 +1,7 @@
 from functools import cached_property
 from typing import cast
 
-import GPUtil
+import GPUtil  # disable=E0401 # type: ignore
 import psutil
 import torch
 from pydantic import BaseModel, Field, computed_field

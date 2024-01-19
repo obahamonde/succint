@@ -1,15 +1,15 @@
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, FastAPI
 from google_auth_oauthlib.flow import Flow  # type: ignore
 from httpx import AsyncClient
 from pydantic import BaseModel, Field  # pylint: disable=E0611
 
-from ..database.application import Model, Surreal, get_db  # type: ignore
+from ..database.application import DatabaseModel, Surreal, get_db  # type: ignore
 from ..utils.decorators import async_io
 
 
-class User(Model):
+class User(DatabaseModel):
     id: str = Field(..., alias="sub")
     name: str
     given_name: str
@@ -58,7 +58,7 @@ def get_flow():
     )
 
 
-def add_auth():
+def auth_controller(app_: FastAPI):
     app = APIRouter(prefix="/auth", tags=["google"])
 
     @app.get("/")
@@ -93,4 +93,5 @@ def add_auth():
             user = User(**response[0])
             return {"token": token, "user_info": user}  # type: ignore
 
-    return app
+    app_.include_router(app)
+    return app_

@@ -2,10 +2,10 @@ from typing import Optional, Type, TypeVar
 
 from fastapi import Body, Depends, FastAPI, Query, Request
 
-from ._base import BaseModel, Controller, Model, Repository, Surreal, get_db
+from ._base import BaseModel, Controller, DatabaseModel, Repository, Surreal, get_db
 
 T = TypeVar("T", bound=BaseModel)
-M = TypeVar("M", bound=Model)
+M = TypeVar("M", bound=DatabaseModel)
 
 
 def create_controller(schema: Type[T], model: Type[M]) -> Controller[M, T]:
