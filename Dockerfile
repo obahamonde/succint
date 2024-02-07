@@ -1,31 +1,35 @@
-# Python + Chromium for Pypuppeteer
+FROM ubuntu:latest
 
-FROM python:3.10
+RUN apt-get update && apt-get install -y python3 python3-pip
 
-ENV PYTHONUNBUFFERED=1
+RUN apt-get install -y curl
+RUN apt-get install -y git
+RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
+RUN apt-get install -y nodejs
 
-ENV PYTHONDONTWRITEBYTECODE=1
+RUN apt-get install -y ffmpeg
 
-RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
+RUN npm install -g lighthouse
+RUN npm install -g prisma
 
-RUN apt-get update && apt-get install -y \
-	chromium \
-	chromium-driver \
-	&& rm -rf /var/lib/apt/lists/*
-
-RUN pip install --upgrade pip
 
 
 WORKDIR /app
 
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
-COPY requirements.txt .
-
-
-RUN pip install -r requirements.txt
+RUN apt-get install -y wget gnupg
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
+RUN sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+RUN apt-get update && apt-get install -y google-chrome-stable
 
 COPY . .
+RUN pip3 install -r requirements.txt
+RUN pip3 install -U prisma
 
-EXPOSE 8080
+RUN python3 -m prisma generate
+RUN python3 -m prisma py fetch
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080","--reload"]

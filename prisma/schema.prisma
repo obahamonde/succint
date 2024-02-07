@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-py"
+  interface = "asyncio"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model IUser {
+    email          String?   @unique
+    email_verified Boolean?  @default(false)
+    family_name    String?
+    given_name     String?
+    locale         String?
+    name           String
+    nickname       String?
+    picture        String?
+    sub            String    @id
+    updated_at     DateTime?
+}
+
+model IMessage {
+    id      String    @id @default(uuid())
+    role    String
+    content String
+    threadId  String
+    thread    IThread    @relation(fields: [threadId], references: [id])
+}
+
+model IThread {
+    id        String     @id @default(uuid())
+    subject   String?
+    createdAt DateTime   @default(now())
+    updatedAt DateTime   @updatedAt
+    messages  IMessage[]
+    agents    IAgent[]   @relation("AgentThreads")
+    // Additional fields as needed (e.g., participants, status)
+}
+
+model IAgent {
+    id      String    @id @default(uuid())
+    model   String
+    tools   String[]
+    threads   IThread[]   @relation("AgentThreads")
+    }
