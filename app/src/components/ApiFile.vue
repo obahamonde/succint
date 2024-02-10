@@ -2,7 +2,9 @@
 import type { User } from "~/types";
 const props = defineProps<{
   user: User;
+  endpoint: string;
 }>();
+const emit = defineEmits(["upload"]);
 const dropzoneRef = ref<HTMLElement | null>(null);
 const onDrop = async (files: File[] | null, event: DragEvent) => {
   if (!files) return;
@@ -19,10 +21,11 @@ const addFile = async (f: File) => {
   try {
     const formData = new FormData();
     formData.append("file", f);
-    await fetch(`/api/file/default/${props.user.sub}`, {
+    const { data:url } =  await useFetch(`/api/${props.endpoint}/${props.user.sub}`, {
       method: "POST",
-      body: formData,
-    });
+      body: formData
+    }).text();
+    emit("upload", unref(url));
   } catch (e) {
     console.log(e);
   }
@@ -52,7 +55,7 @@ const inputFiles = () => {
         class="px-12 py-4 min-w-128 max-w-256 cursor-pointer row center"
         :class="isOverDropZone ? 'borded-dashed' : 'border-none'"
       >
-      Upload Files <Icon icon="mdi-upload" class="x2" />()
+      Upload Files <Icon icon="mdi-upload" class="x2" />
        </div>
     </div>
   

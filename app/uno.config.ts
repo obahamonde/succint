@@ -130,7 +130,7 @@ export default defineConfig({
     colors: {
       primary: "#BFD732",
       secondary: "#6D5DF9", 
-      accent: "#000000",
+      accent: "#171717",
       warning: "#fe8a71",
       error: "#ee5253",
       info: "#fefefe",

@@ -1,32 +1,59 @@
+from abc import ABC, abstractmethod
 from functools import cached_property
 from os import environ
-from typing import Literal
+from typing import AsyncGenerator, Generic, TypeVar
 
-from agent_proto import Tool
-from agent_proto.utils import setup_logging
-from langchain.embeddings.huggingface import HuggingFaceEmbeddings  # type: ignore
-from langchain.vectorstores.pgvector import PGVector
-from pydantic import Field
+from agent_proto.utils import robust, setup_logging
+from langchain.embeddings.openai import OpenAIEmbeddings  # type: ignore
+from langchain.vectorstores.pgvector import PGVector  # type: ignore
+from langchain_core.documents import Document
+from pydantic import BaseModel, Field
+
+T = TypeVar("T")
 
 
-class PGRetrievalTool(Tool):
+class ScoredDocument(Document):
+    score: float
+
+
+class Retriever(BaseModel, ABC, Generic[T]):
+    """
+    Base class for a retriever tool.
+    """
+
+    @cached_property
+    @abstractmethod
+    def embeddings(self) -> T:
+        pass
+
+    @robust
+    @abstractmethod
+    async def query(self, inputs: str, top_k: int) -> list[ScoredDocument]:
+        pass
+
+    @robust
+    @abstractmethod
+    async def upsert(self, inputs: str) -> int:
+        pass
+
+
+class PGRetriever(Retriever[OpenAIEmbeddings]):
     """
     Retrieval Augmented Generation (RAG) tool for storing and querying sentence embeddings.
     """
 
     namespace: str = Field(..., description="Namespace on the knowledge store")
-    inputs: str = Field(..., description="Input text to store or query")
-    top_k: int = Field(5, description="Number of documents to retrieve")
-    action: Literal["query", "upsert"] = Field("query")
 
     @cached_property
     def embeddings(self):
-        return HuggingFaceEmbeddings()
+        return OpenAIEmbeddings()
 
     @cached_property
     def store(self):
         return PGVector(
-            connection_string=environ["DATABASE_URL"],
+            connection_string=environ["DATABASE_URL"]
+            .replace("postgres://", "postgresql+psycopg2://")
+            .split("?")[0],
             embedding_function=self.embeddings,
             embedding_length=1536,
             collection_name=self.namespace,
@@ -38,14 +65,23 @@ class PGRetrievalTool(Tool):
     def retriever(self):
         return self.store.as_retriever()
 
-    async def query(self):
-        return self.retriever.get_relevant_documents(query=self.inputs)
+    async def _query(
+        self, inputs: str, top_k: int = 5
+    ) -> AsyncGenerator[ScoredDocument, None]:
+        response = await self.retriever.vectorstore.asimilarity_search_with_relevance_scores(  # type: ignore
+            query=inputs, k=top_k
+        )
+        for res in response:
+            doc, score = res
+            yield ScoredDocument(**doc.dict(), score=score)
 
-    async def upsert(self):
+    @robust
+    async def query(self, inputs: str, top_k: int = 5):
+        return [doc async for doc in self._query(inputs, top_k)]
+
+    @robust
+    async def upsert(self, inputs: str):
         response = await self.retriever.vectorstore.aadd_texts(  # type: ignore
-            texts=self.inputs, metadatas=[self.model_dump()]
+            texts=inputs, metadatas=[{"namespace": self.namespace, "text:": inputs}]
         )
         return len(response)
-
-    async def run(self):
-        return await self.query() if self.action == "query" else await self.upsert()

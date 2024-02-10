@@ -2,9 +2,7 @@ import tiktoken
 from agent_proto import Tool, async_io
 from aiohttp import ClientSession
 from langchain.agents.agent_toolkits.openapi import planner
-from langchain.agents.agent_toolkits.openapi.spec import (
-    reduce_openapi_spec,
-)  # type: ignore
+from langchain.agents.agent_toolkits.openapi.spec import reduce_openapi_spec
 from langchain.chat_models.openai import ChatOpenAI  # type: ignore
 from langchain.requests import RequestsWrapper
 
@@ -44,7 +42,6 @@ class Plugin(Tool):
                 ),
                 llm=ChatOpenAI(
                     openai_api_base="https://app.oscarbahamonde.com/v1",
-                    # api_key="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",
                     model="mistralai/Mistral-7B-Instruct-v0.2",
                     # model="gpt-4-0125-preview",
                 ),

@@ -3,8 +3,9 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from httpx import AsyncClient
-from prisma.models import IUser
 from pydantic import BaseModel, Field
+
+from prisma.models import IUser
 
 
 class User(BaseModel):

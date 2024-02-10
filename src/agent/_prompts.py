@@ -15,14 +15,7 @@ RUN_TEMPLATE: str = """
 		"""
 
 CHAT_TEMPLATE: str = """
-[INST]
-Use the following context to have additional context about the user input:
-Context:
-{{ context }}
-[/INST]
-User input:
+Similar results from knowledge base:
 
-{{ prompt }} 
-[INST]
-Your answer must be 100% in the same language as the user input.[/INST]
+{{ context }}
 """

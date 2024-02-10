@@ -12,11 +12,11 @@ const props = defineProps({
 })
 </script>
 <template>
-	<div class="w-1/2 mx-auto p-4">
-		<div class="sh rounded-lg backdrop-blur-md ">
-			<div v-for="message in props.messages" :key="message.content" class="col center">
-				<p class="row center">
-				<img :src="message.role === 'user' ? props.user.picture : '/mistress.png'" class="x4 rf m-4"/>
+	<div class="w-full mx-auto p-4">
+		<div class="rounded-lg">
+			<div v-for="message in props.messages" :key="message.content" class="col start my-4">
+				<p class="row">
+				<img :src="message.role === 'user' ? props.user.picture : isDark ? './chatgpt-dark.png' : 'chatgpt-light.png'" class="x2 rf m-4"/>
 				<UIRichText :content="message.content" />
 					</p>
 			</div>

@@ -21,3 +21,6 @@ agent-proto
 pgvector
 aioredis
 aio-pika
+psycopg2-binary
+unstructured[all-docs]
+geocoder

@@ -1,5 +1,5 @@
 from agent_proto.tool import Tool, ToolDefinition, ToolOutput
 
-from .agent import Agent
+from .agent import ChatGPT
 
-__all__ = ["Agent", "Tool", "ToolDefinition", "ToolOutput"]
+__all__ = ["ChatGPT", "Tool", "ToolDefinition", "ToolOutput"]

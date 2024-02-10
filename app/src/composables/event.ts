@@ -7,12 +7,11 @@ export const useEvent = <T>(url: string, callback: (data: T) => any) => {
 			eventSource.close();
 		}
 		);
-		const cleanup = () => {
-			eventSource.close();
-		}
-		return cleanup;
+
 	}
 
-
+	return () => {
+		eventSource.close();
+	};
 }
 

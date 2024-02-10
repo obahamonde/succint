@@ -3,15 +3,16 @@ from typing import AsyncIterable
 from fastapi import APIRouter, File, UploadFile
 from sse_starlette.sse import EventSourceResponse
 
-from src import Agent
-from src.tools import GenerateImage, GoogleSearchTool, Plugin, ResourceManager, Vision
+from src.agent.mistral import MistralAI
+from src.services import ObjectStorage
+from src.tools import GenerateImage, Plugin, ResourceManager, Vision
 
 app = APIRouter()
-agent = Agent()
+storage = ObjectStorage()
 
 
-@app.post("/image")
-async def generate_image(tool: GenerateImage):
+@app.post("/image/{namespace}")
+async def generate_image(namespace: str, tool: GenerateImage):
     return await tool()
 
 
@@ -20,8 +21,9 @@ async def generate_vision(inputs: UploadFile = File(...)):
     return await Vision(inputs=await inputs.read())()
 
 
-@app.get("/chat")
-async def generate_chat_stream(inputs: str):
+@app.get("/chat/{namespace}")
+async def generate_chat_stream(inputs: str, namespace: str):
+    agent = MistralAI(namespace=namespace)
     _generator = await agent.chat(message=inputs, stream=True)
     assert isinstance(_generator, AsyncIterable)
 
@@ -30,25 +32,24 @@ async def generate_chat_stream(inputs: str):
             if chunk:
                 yield chunk
             else:
-                yield {"event": "done", "data": "done"}
+                continue
+        yield {"event": "done", "data": "done"}
 
     return EventSourceResponse(_stream())
 
 
-@app.post("/chat")
-async def generate_chat(inputs: str):
-    return await agent.chat(
-        message=await agent.chat_template.render_async(
-            prompt=inputs, context=await agent.search(query=inputs)
-        ),
-        stream=False,
-    )
+@app.post("/chat/{namespace}")
+async def generate_chat(message: str, namespace: str):
+    agent = MistralAI(namespace=namespace)
+    iterator = await agent.chat(message=message)
+    return EventSourceResponse(iterator)
 
 
-@app.post("/completion")
+@app.post("/completion/{namespace}")
 async def generate_completion(
-    inputs: str, instruction: str = "Autocomplete the following."
+    inputs: str, namespace: str, instruction: str = "Autocomplete the following."
 ):
+    agent = MistralAI(namespace=namespace)
     return await agent.instruct(
         message=inputs,
         instruction=instruction,
@@ -63,3 +64,9 @@ async def generate_resource():
 @app.post("/plugin")
 async def generate_openapi(tool: Plugin):
     return await tool()
+
+
+@app.post("/load/{namespace}")
+async def upload_file(file: UploadFile, namespace: str):
+    agent = MistralAI(namespace=namespace)
+    return await agent.upload(file=file)

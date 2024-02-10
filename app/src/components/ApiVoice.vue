@@ -13,11 +13,11 @@ const toggle = () => {
 }
 </script>
 <template>
-<button class="btn-icon">
+<button class="btn-icon m-4">
 
 	<Icon :icon="isListening ? 'mdi-microphone-off' : 'mdi-microphone'"
 		@click="toggle"
-		class="x3"
+		class="x2"
 	/>
 
 </button>

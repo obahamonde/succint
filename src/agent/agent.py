@@ -5,26 +5,26 @@ The agent can be used to run tools based on user input.
 The agent is trained to provide useful responses and guidance to the user.
 """
 
-import asyncio
 import json as json_module
-from functools import cached_property, lru_cache
-from typing import AsyncIterator, List, Literal, Optional, Type
+from functools import cached_property
+from typing import AsyncIterator, Hashable, List, Type
 
 from agent_proto import BaseAgent, robust
 from agent_proto.agent import Message
 from agent_proto.tool import Tool, ToolDefinition, ToolOutput
 from agent_proto.utils import setup_logging
-from jinja2 import Template
+from fastapi import UploadFile
 from openai import AsyncOpenAI
 from openai._streaming import AsyncStream
+from openai.types.chat import ChatCompletionChunk, ChatCompletionToolParam
 from openai.types.chat.chat_completion import ChatCompletion
-from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
+from openai.types.shared_params import FunctionDefinition
 from pydantic import BaseModel, Field
 from typing_extensions import Iterable
 
-from ..services import PGRetrievalTool
+from ..services import PineconeClient
+from ..services.minioStorage import ObjectStorage
 from ..tools import GoogleSearchTool
-from ._prompts import CHAT_TEMPLATE, RUN_TEMPLATE
 
 logger = setup_logging(__name__)
 
@@ -35,7 +35,7 @@ class AgentSchema(BaseModel):
     messages: List[Message]
 
 
-class Agent(BaseAgent[AsyncOpenAI]):
+class ChatGPT(BaseAgent[AsyncOpenAI], Hashable):
     """An agent that interacts with users and performs tool calls based on user input.
 
     Attributes:
@@ -49,31 +49,22 @@ class Agent(BaseAgent[AsyncOpenAI]):
         __call__: Run a specific tool class based on a user message.
     """
 
-    model: str = Field(default="TheBloke/Mistral-7B-Instruct-v0.2-AWQ")
+    model: str = Field(default="gpt-3.5-turbo-0125")
     tools: Iterable[Type[Tool]] = Field(default_factory=Tool.__subclasses__)
     messages: List[Message] = []
-
-    @cached_property
-    def run_template(self):
-        """The template used for generating the message sent to the agent. Crafted using prompt engineering to guide the model to infer the schema for performing tool calls based on user's message."""
-        return Template(RUN_TEMPLATE, enable_async=True)
-
-    @cached_property
-    def chat_template(self):
-        """The template used for enabling the agent with context and instructions for responding to user's messages."""
-        return Template(CHAT_TEMPLATE, enable_async=True)
+    namespace: str = Field(default="default")
 
     def __call__(self):
         """Load the AsyncClient."""
-        return AsyncOpenAI(
-            api_key=".",
-            base_url="http://mistral:8000/v1",
-        )
+        return AsyncOpenAI()
+
+    @cached_property
+    def retriever(self):
+        """The retriever tool used by the agent."""
+        return PineconeClient(namespace=self.namespace)
 
     @robust
-    async def chat(  # type: ignore
-        self, *, message: str, stream: bool = True
-    ) -> AsyncIterator[str] | Message:
+    async def chat(self, *, message: str, stream: bool = True):  # type: ignore
         """
         Chat with the agent.
 
@@ -88,12 +79,47 @@ class Agent(BaseAgent[AsyncOpenAI]):
         Raises:
             ValueError: If the response doesn't contain any content.
         """
+        query_vector = await self.embed(message=message)
+        matches = (await self.retriever.query(vector=query_vector)).matches
+        context = "\n".join(
+            f"Result: {match.metadata.get('text')}\nScore: {match.score}"
+            for match in matches
+        )
         response = await self().chat.completions.create(  # type: ignore
             model=self.model,
-            messages=[{"role": "user", "content": message}],
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"Use the following context to provide a better response: {context}",
+                },
+                {"role": "user", "content": message},
+            ],
             stream=stream,
-            max_tokens=2048,
+            max_tokens=4096,
+            tools=[
+                ChatCompletionToolParam(
+                    type="function",
+                    function=FunctionDefinition(
+                        name=t.__name__,
+                        description=(
+                            t.__doc__ if t.__doc__ else "[No description available]"
+                        ),
+                        parameters=t.definition(),  # type: ignore
+                    ),
+                )
+                for t in self.tools  # pylint: disable=E1133
+            ],
         )
+
+        if stream:
+            assert isinstance(response, AsyncStream)
+
+            response = await self().chat.completions.create(  # type: ignore
+                model=self.model,
+                messages=[{"role": "user", "content": message}],
+                stream=stream,
+                max_tokens=3072,
+            )
 
         if stream:
             assert isinstance(response, AsyncStream)
@@ -104,76 +130,77 @@ class Agent(BaseAgent[AsyncOpenAI]):
                     assert isinstance(choice, ChatCompletionChunk)
                     content = choice.choices[0].delta.content
                     if content:
-                        yield Message(
-                            role="assistant", content=content
-                        ).model_dump_json()
+                        yield content
 
                     else:
                         continue
                 yield {"event": "done", "data": "done"}
 
-            return _()  # type: ignore
+            return _()  # type: ignore  # type: ignore
 
         assert isinstance(response, ChatCompletion)
         content = response.choices[0].message.content
         if content:
-            message_ = Message(role="assistant", content=content)
-            return message_
-        raise ValueError("No content in response")
+            return ToolOutput(content=content, role="assistant")
 
     @robust
     async def run(  # type: ignore
-        self, *, message: str, definitions: Optional[List[ToolDefinition]] = None
+        self, *, message: str, definitions: Iterable[ToolDefinition] | None = None
     ) -> ToolOutput:
-        """Executes a tool based on natural language input.
-        It works as follows:
-        1. The user provides a message.
-        2. The agent picks a tool from the list of definitions available, otherwise it returns a chat `Message` object.
-        3. The agent sends an inferred json object based on the tool definition and user input to the Tool class, which call it's constructor with the parsed json object.
-        4. The Tool executes the logic implemented on it's run method and returns the output as a ToolOutput object with the following structure:
-
-        ```json
-        {
-            "role": "tool_name",
-            "content": "tool_output"
-        }
-        ```
-
-        5. The agent returns the ToolOutput object to the user.
-
-        Args:
-            message (str): The message sent to the agent.
-
-        Returns:
-            ToolOutput: The output of the tool.
-        """
         if definitions is None:
-            definitions = [klass.definition() for klass in self.tools]
-        prompt_ = await self.run_template.render_async(
-            message=message,
-            definitions=definitions,
+            defs = [
+                ChatCompletionToolParam(
+                    type="function",
+                    function=FunctionDefinition(
+                        name=t.__name__,
+                        description=(
+                            t.__doc__ if t.__doc__ else "[No description available]"
+                        ),
+                        parameters=t.definition()["properties"],
+                    ),
+                )
+                for t in self.tools  # pylint: disable=E1133
+            ]
+        else:
+            defs = [
+                ChatCompletionToolParam(
+                    type="function",
+                    function=FunctionDefinition(
+                        name=definition["title"],
+                        description=definition["description"],
+                        parameters=definition["properties"],
+                    ),
+                )
+                for definition in definitions
+            ]
+
+        response = await self().chat.completions.create(
+            messages=[
+                {"role": "user", "content": message},
+                {
+                    "role": "system",
+                    "content": "You are a function orchestrator. Based on user input determine which tool is gonna be used.",
+                },
+            ],
+            model=self.model,
+            max_tokens=4096,
+            tools=defs,
         )
-        response = await self.chat(
-            message=prompt_,
-            stream=False,
-        )
-        assert isinstance(response, Message)
-        data = json_module.loads(response.content)
-        try:
-            for deff in definitions:
-                if deff["title"].lower() == data["role"]:
-                    tool = next(
-                        klass for klass in self.tools if klass.__name__ == deff["title"]
-                    )
-                    assert issubclass(tool, Tool)
-                    return await tool(**data)()
-            output = await self.chat(message=message, stream=False)
-            assert isinstance(output, Message)
-            return ToolOutput(role="assistant", content=output.content)
-        except (StopIteration, KeyError):
-            output = await self.chat(message=message, stream=False)
-            assert isinstance(output, Message)
-            return ToolOutput(role="assistant", content=output.content)
+        calls = response.choices[0].message.tool_calls
+        if not calls:
+            content = response.choices[0].message.content
+            if content:
+                return ToolOutput(content=content, role="assistant")
+            return ToolOutput(content="No tool call was inferred.", role="assistant")
+        for call in calls:
+            tool = next(
+                t
+                for t in self.tools
+                if t.__name__.lower() == call.function.name.lower()
+            )
+            parameters = call.function.arguments
+            return await tool(**json_module.loads(parameters))()
+        return ToolOutput(content="No tool call was inferred.", role="assistant")
 
     @robust
     async def instruct(self, *, message: str, instruction: str) -> str:
@@ -187,48 +214,36 @@ class Agent(BaseAgent[AsyncOpenAI]):
         """
         response = await self().completions.create(
             prompt=f"""
-            
-            [INST]
-            {instruction}
-            [/INST]
-            <s>{message}</s>
+            Instruction: {instruction}
+            Message: {message}
             """,
             model=self.model,
         )
         return response.choices[0].text
 
+    @robust
     async def search(self, query: str):
         """Search the web using the agent."""
-        results = await GoogleSearchTool(inputs=query)()
-        summarized = await asyncio.gather(
-            *[
-                self.instruct(
-                    message=el,
-                    instruction=f"Summarize this content, the output must be 100% exclusively in the same language as the input: {query}",
-                )
-                for el in results.content
-            ]
-        )
-        context = "\n".join(summarized)
-        logger.info(f"Results from the web: {context}")
-        return f"Results from the web: {context}"
+        return await GoogleSearchTool(inputs=query)()
 
-    @lru_cache
-    def get_retriever(
-        self, query: str, action: Literal["query", "upsert"], top_k: int = 5
-    ):
-        return PGRetrievalTool(
-            namespace=self.model, inputs=query, top_k=top_k, action=action
+    async def embed(self, *, message: str):
+        """Embed the message in a vector space."""
+        response = await self().embeddings.create(
+            input=message, model="text-embedding-ada-002"
         )
+        return response.data[0].embedding
+
+    def __hash__(self):
+        return hash(self.model + self.namespace)
+
+    @cached_property
+    def storage(self):
+        """The object storage used by the agent."""
+        return ObjectStorage()
 
     @robust
-    async def upsert(self, query: str):
-        """Upsert a document to the knowledge store."""
-        return await self.get_retriever(query, "upsert")()
-
-    @robust
-    async def query(self, query: str):
-        """Query the knowledge store."""
-        data = await self.get_retriever(query, "query")()
-        documents = data.content
-        return "\n".join([doc.metadata["text"] for doc in documents])
+    async def upload(self, *, file: UploadFile):
+        """Upload a file to the object storage."""
+        return await self.storage.put(
+            key=f"{self.namespace}/{file.filename}", file=file
+        )

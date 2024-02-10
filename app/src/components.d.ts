@@ -9,6 +9,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     ApiAssistants: typeof import('./components/ApiAssistants.vue')['default']
     ApiAuthorizer: typeof import('./components/ApiAuthorizer.vue')['default']
+    ApiChatContainer: typeof import('./components/ApiChatContainer.vue')['default']
     ApiChatMessage: typeof import('./components/ApiChatMessage.vue')['default']
     ApiFile: typeof import('./components/ApiFile.vue')['default']
     ApiFunction: typeof import('./components/ApiFunction.vue')['default']
@@ -48,10 +49,12 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     StreamPage: typeof import('./components/StreamPage.vue')['default']
+    UiBtnDark: typeof import('./components/UiBtnDark.vue')['default']
     UiBtnGradient: typeof import('./components/UiBtnGradient.vue')['default']
     UIBtnGradient: typeof import('./components/UIBtnGradient.vue')['default']
     UiFile: typeof import('./components/UiFile.vue')['default']
     UiModal: typeof import('./components/UiModal.vue')['default']
+    UIPreview: typeof import('./components/UIPreview.vue')['default']
     UIRichText: typeof import('./components/UIRichText.vue')['default']
   }
 }

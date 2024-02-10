@@ -29,7 +29,7 @@ const md = MarkdownIt({
 </script>
 <template>
   <div
-    class="bg-gray-300 rounded sh max-w-lg text-start text-xs p-4 markdown-body w-full min-w-96 min-h-16"
+    class="bg-gray-300 rounded sh max-w-lg text-start text-xs p-4 markdown-body"
     v-html="md.render(props.content)"
   ></div>
 </template>
