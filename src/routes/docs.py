@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, File, UploadFile
 
-from ..agent import ChatGPT
+from ..agent.mistral import MistralAI
 from ..services.pineconeVector import Vector
 from ..utils import process_document
 
@@ -10,14 +10,15 @@ app = APIRouter()
 
 
 @app.post("/upload/{namespace}")
-async def load(namespace: str, file: UploadFile = File(...)):
-    agent = ChatGPT(namespace=namespace)
-    return await agent.upload(file=file)
+async def upload(namespace: str, file: UploadFile = File(...)):
+    agent = MistralAI(namespace=namespace)
+    url = await agent.upload(file=file)
+    return {"url": url}
 
 
 @app.post("/upsert/{namespace}")
 async def upsert(namespace: str, file: UploadFile = File(...)):
-    agent = ChatGPT(namespace=namespace)
+    agent = MistralAI(namespace=namespace)
     documents = await process_document(file)
     embeddings = await asyncio.gather(
         *[agent.embed(message=document) for document in documents]

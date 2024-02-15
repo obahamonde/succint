@@ -2,6 +2,7 @@ import base64
 import io
 import os
 from functools import cached_property
+from time import perf_counter
 from uuid import uuid4
 
 from agent_proto.client import APIClient
@@ -9,12 +10,15 @@ from agent_proto.tool import Tool
 from fastapi import UploadFile
 from openai import AsyncOpenAI
 
+from ..schemas import URLResponse
+from ..schemas.responses import TikTokenizer
 from ..services import ObjectStorage
 
 ai = AsyncOpenAI()
+tokenizer = TikTokenizer()
 
 
-async def oai_generate_image(*, inputs: str) -> bytes:
+async def oai_generate_image(*, inputs: str) -> dict[str, str | int]:
     response = await ai.images.generate(
         prompt=inputs,
         model="dall-e-3",
@@ -23,7 +27,9 @@ async def oai_generate_image(*, inputs: str) -> bytes:
         size="1024x1024",
     )
     response = response.data[0].b64_json  # type: ignore
-    return base64.b64decode(f"data:image/png;base64,{response}")
+    tokens = tokenizer.encode(inputs)
+    url = base64.b64decode(f"data:image/png;base64,{response}").decode("utf-8")
+    return {"url": url, "tokens": len(tokens)}
 
 
 class GenerateImage(Tool):
@@ -45,19 +51,33 @@ class GenerateImage(Tool):
         return ObjectStorage()
 
     async def run(self):
-        key = f"images/{self.inputs[8]}-{str(uuid4())}.png"
+        start = perf_counter()
+        key = f"images/{self.inputs[8]} -{str(uuid4())}.png"
         try:
             response = await self.client.__load__().request(
                 "", "POST", json={"inputs": self.inputs + "\n\n" + "Size:1024x1024"}
             )
-            image = response.content
+            image = io.BytesIO(response.content)
             url = await self.storage.put(
                 key=key, file=UploadFile(file=image, filename=key)
             )
-            return {"url": url}
-        except (AttributeError, KeyError):
-            response = await oai_generate_image(inputs=self.inputs)
-            url = await self.storage.put(
-                key=key, file=UploadFile(file=io.BytesIO(response), filename=key)
+            return URLResponse(
+                url=url,
+                processing_time=perf_counter() - start,
+                tokens=len(tokenizer.encode(self.inputs)),
             )
-            return {"url": url}
+        except Exception:
+            response = await oai_generate_image(inputs=self.inputs)
+            b64_image = response["url"]
+            tokens = response["tokens"]
+            assert isinstance(b64_image, str)
+            assert isinstance(tokens, int)
+            url = await self.storage.put(
+                key=key,
+                file=UploadFile(file=io.BytesIO(b64_image.encode()), filename=key),
+            )
+            return URLResponse(
+                url=url,
+                processing_time=perf_counter() - start,
+                tokens=tokens,
+            )

@@ -1,13 +1,13 @@
 """
 Agent module.
-A Large Language Model Agent (OLLAMA) is an agent based on mistral-7B-instruct-2.0 quantized to 4 bits that can be run locally and interacted with via a chat interface.
+A Large Language Model Agent is an agent based on mistral-7B-instruct-2.0 quantized to 4 bits which can be interacted with via a chat interface.
 The agent can be used to run tools based on user input.
 The agent is trained to provide useful responses and guidance to the user.
 """
 
 import json as json_module
 from functools import cached_property
-from typing import AsyncIterator, Hashable, List, Type
+from typing import Hashable, List, Type
 
 from agent_proto import BaseAgent, robust
 from agent_proto.agent import Message

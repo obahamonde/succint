@@ -10,6 +10,7 @@ import json as json_module
 from functools import cached_property
 from typing import AsyncIterator, List, Optional, Type
 
+import tiktoken
 from agent_proto import BaseAgent, robust
 from agent_proto.agent import Message
 from agent_proto.tool import Tool, ToolDefinition, ToolOutput
@@ -20,10 +21,10 @@ from openai import AsyncOpenAI
 from openai._streaming import AsyncStream
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
+from prisma.models import IMessage
 from pydantic import BaseModel, Field
 from typing_extensions import Iterable
 
-from ..services.minioStorage import ObjectStorage
 from ._prompts import CHAT_TEMPLATE, RUN_TEMPLATE
 
 logger = setup_logging(__name__)
@@ -41,22 +42,25 @@ class MistralAI(BaseAgent[AsyncOpenAI]):
     Attributes:
         messages (list[Message]): List of messages exchanged between the user and the agent.
         model (str): The model used by the agent.
-        tools (list[Type[Tool[Any]]]): List of available tool classes.
-
-    Methods:
         chat: Send a message to the agent and return the response.
         run: Run a tool based on a user message.
         __call__: Run a specific tool class based on a user message.
     """
     namespace: str = Field(default="default")
     model: str = Field(default="TheBloke/Mistral-7B-Instruct-v0.2-AWQ")
+    # model: str = Field(default="clibrain/lince-mistral-7b-it-es")
     tools: Iterable[Type[Tool]] = Field(default_factory=Tool.__subclasses__)
     messages: List[Message] = []
-
+    max_sequence_length: int = Field(default=4096)
     @cached_property
     def run_template(self):
         """The template used for generating the message sent to the agent. Crafted using prompt engineering to guide the model to infer the schema for performing tool calls based on user's message."""
         return Template(RUN_TEMPLATE, enable_async=True)
+
+    @cached_property
+    def tokenizer(self):
+        """The tokenizer used by the agent."""
+        return tiktoken.encoding_for_model(model_name="gpt-3.5")
 
     @cached_property
     def chat_template(self):
@@ -88,11 +92,32 @@ class MistralAI(BaseAgent[AsyncOpenAI]):
         Raises:
             ValueError: If the response doesn't contain any content.
         """
+        # messages = await IMessage.prisma().find_many(
+        #     take=20, where={"user": {"sub": sub}}  # type: ignore
+        # )
+        # tokens = self.tokenizer.encode(
+        #     " ".join([message.content for message in messages])
+        # )
+        # if len(tokens) > self.max_sequence_length:
+        #     messages = messages[-(self.max_sequence_length // 2) :]
         response = await self().chat.completions.create(  # type: ignore
             model=self.model,
+            # messages=[
+            #     {
+            #         "role": "user",
+            #         "content": message,
+            #     },
+            #     *[
+            #         {
+            #             "role": message.role,
+            #             "content": message.content,
+            #         }
+            #         for message in messages
+            #     ],  # type: ignore
+            # ],
             messages=[{"role": "user", "content": message}],
             stream=stream,
-            max_tokens=3072,
+            max_tokens=2048,
         )
 
         if stream:
@@ -100,10 +125,12 @@ class MistralAI(BaseAgent[AsyncOpenAI]):
 
             async def _():
                 nonlocal response
+                string = ""
                 async for choice in response:  # type: ignore
                     assert isinstance(choice, ChatCompletionChunk)
                     content = choice.choices[0].delta.content
                     if content:
+                        string += content
                         yield Message(
                             role="assistant", content=content
                         ).model_dump_json()
@@ -111,7 +138,12 @@ class MistralAI(BaseAgent[AsyncOpenAI]):
                     else:
                         continue
                 yield {"event": "done", "data": "done"}
-
+                # await IMessage.prisma().create(
+                #     data={"user": {"connect": {"sub": sub}}, "content": message}
+                # )
+                # await IMessage.prisma().create(  # type: ignore
+                #     data={"user": {"connect": {"sub": sub}}, "content": string}
+                # )
             return _()  # type: ignore
 
         assert isinstance(response, ChatCompletion)
@@ -187,11 +219,11 @@ class MistralAI(BaseAgent[AsyncOpenAI]):
         """
         response = await self().completions.create(
             prompt=f"""
-            
+            <s>
             [INST]
             {instruction}
             [/INST]
-            <s>{message}</s>
+            {message}</s>
             """,
             model=self.model,
         )

@@ -37,7 +37,7 @@ watch(isAuthenticated, async (isAuthenticated) => {
     <slot :user="state.user" />
   </div>
   <div v-else>
-    <div class="col center gap-4 p-4">
+    <div class="col center gap-4 p-4 h-full">
       <Icon icon="mdi-loading" class="animate-spin x2" />
       <h1 class="text-2xl">Loading...</h1>
       <button class="btn-get" @click="loginWithRedirect()">Login</button>

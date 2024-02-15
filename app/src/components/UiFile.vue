@@ -22,11 +22,10 @@ const handleUpload = (url: string) => {
 <ApiFile :user="props.user" endpoint="upload" @upload="handleUpload($event)" />
 
 <div
-class="grid grid-cols-3 gap-4"
+class="grid3 gap-4"
 >
 <a v-for="u in urls" :href="u.url" target="_blank">
 <Icon icon="mdi-file" class="x2" />
-<span>{{u.url}}</span>
 </a>
 </div>
 </template>

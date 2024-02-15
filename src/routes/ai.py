@@ -12,7 +12,7 @@ storage = ObjectStorage()
 
 
 @app.post("/image/{namespace}")
-async def generate_image(namespace: str, tool: GenerateImage):
+async def generate_image(tool: GenerateImage):
     return await tool()
 
 
@@ -24,7 +24,7 @@ async def generate_vision(inputs: UploadFile = File(...)):
 @app.get("/chat/{namespace}")
 async def generate_chat_stream(inputs: str, namespace: str):
     agent = MistralAI(namespace=namespace)
-    _generator = await agent.chat(message=inputs, stream=True)
+    _generator = await agent.chat(message=inputs, sub=namespace, stream=True)
     assert isinstance(_generator, AsyncIterable)
 
     async def _stream():
@@ -41,9 +41,9 @@ async def generate_chat_stream(inputs: str, namespace: str):
 @app.post("/chat/{namespace}")
 async def generate_chat(message: str, namespace: str):
     agent = MistralAI(namespace=namespace)
-    iterator = await agent.chat(message=message)
-    return EventSourceResponse(iterator)
-
+    response = await agent.chat(message=message, sub=namespace, stream=False)
+    assert not isinstance(response, AsyncIterable)
+    return response
 
 @app.post("/completion/{namespace}")
 async def generate_completion(

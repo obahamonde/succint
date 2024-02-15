@@ -1,4 +1,4 @@
-<script setup lang="ts">
+w<script setup lang="ts">
 import type { User } from "~/types";
 const props = defineProps<{
   user: User;
@@ -55,7 +55,10 @@ const inputFiles = () => {
         class="px-12 py-4 min-w-128 max-w-256 cursor-pointer row center"
         :class="isOverDropZone ? 'borded-dashed' : 'border-none'"
       >
-      Upload Files <Icon icon="mdi-upload" class="x2" />
+      Upload Files <Icon icon="mdi-upload" class="x2" 
+    
+
+/>
        </div>
     </div>
   

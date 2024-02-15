@@ -80,7 +80,7 @@ export default defineConfig({
     ],
     [
       "input",
-      "my-2 p-1 rounded-lg shadow-primary sh-md border text-info dark:text-light border-primary dark:border-light dark:bg-dark dark:text-light outline-none",
+      "my-2 p-1 rounded-lg shadow-primary sh-md border text-info dark:text-light border-primary dark:border-light dark:bg-accent dark:text-light outline-none",
     ],
     ["btn-icon", "p-1 scale cp x2 m-1 rounded-full"],
     ["over", "shadow-gray-500 shadow-lg"],

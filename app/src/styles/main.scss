@@ -4,10 +4,11 @@
 html,
 body,
 #app {
-  height: 100%;
+  height: screen;
   margin: 0;
   padding: 0;
-  overflow: auto;
+  overflow:hidden;
+  box-sizing: border-box;
 }
 
 html.dark {

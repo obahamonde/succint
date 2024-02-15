@@ -23,13 +23,14 @@ model IUser {
     picture        String?
     sub            String    @id
     updated_at     DateTime?
+    audio_tracks   AudioTrack[]  @relation("UserAudioTracks")
 }
 
 model IMessage {
     id      String    @id @default(uuid())
     role    String
     content String
-    threadId  String
+    userID  String
     thread    IThread    @relation(fields: [threadId], references: [id])
 }
 
@@ -49,3 +50,28 @@ model IAgent {
     tools   String[]
     threads   IThread[]   @relation("AgentThreads")
     }
+
+
+model AudioTrack {
+  id        String   @id @default(uuid())
+  playlist  String   
+  url       String   @unique
+  user      IUser    @relation("UserAudioTracks", fields: [userId], references: [sub])
+  userId    String   
+  
+  duration  Int     
+  cover     String?  // Assuming cover URL is stored as a string
+  title     String
+  lyrics    String?
+  namespace String   @default("audio_tracks")
+}
+
+model YouTubeVideo {
+  id        String @id
+  title     String
+  thumbnail String
+  duration  Int
+  views     Int
+  channel   String
+  url       String
+}

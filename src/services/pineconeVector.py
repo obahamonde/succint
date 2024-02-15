@@ -4,7 +4,6 @@ from uuid import uuid4
 
 from agent_proto import APIClient
 from httpx import AsyncClient
-from httpx import AsyncClient
 from pydantic import BaseModel, Field
 
 
@@ -74,7 +73,7 @@ class PineconeClient(APIClient):
     """
 
     namespace: str = Field(default="default")
-    base_url: str = Field(default=environ["PINECONE_URL"], init=True, repr=True)
+    base_url: str = Field(default=environ["PINECONE_URL"], repr=True)
     headers: dict[str, str] = Field(
         default_factory=lambda: {"api-key": environ["PINECONE_API_KEY"]},
         init=True,

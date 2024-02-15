@@ -1,6 +1,5 @@
 from fastapi.staticfiles import StaticFiles
 
-
 from prisma import Prisma
 from src import create_app
 

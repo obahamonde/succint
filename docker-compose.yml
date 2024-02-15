@@ -28,7 +28,7 @@ services:
       - "8000:8000"
     environment:
       - HF_TOKEN=${HF_TOKEN}
-    command: --host 0.0.0.0 --model TheBloke/Mistral-7B-Instruct-v0.2-AWQ   --gpu-memory-utilization 0.99  --max-model-len 4096
+    command: --host 0.0.0.0 --model TheBloke/Mistral-7B-Instruct-v0.2-AWQ  --gpu-memory-utilization 0.99  --max-model-len 3072
     env_file:
       - .env
     deploy:
